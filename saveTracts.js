@@ -5,10 +5,9 @@
 //        .defer(d3.csv,"allCentroids.csv")
 //	.await(dataDidLoad);
 //})
-var placesFile = d3.csv("all_durations.csv")
 var centroidsFile = d3.csv("allCentroids.csv")
-
-Promise.all([placesFile,centroidsFile])
+var finishedGids = d3.json("finished_gids.json")
+Promise.all([centroidsFile,finishedGids])
 .then(function(data){
 	//console.log(data[0])
 	dataDidLoad(data[0],data[1])
@@ -17,40 +16,74 @@ var zoom = 15
 var finishedIds = 0
 var finished = []
 var centroidsData = null
-var geoidIndex = 795
+var geoidIndex = 4000
 var placesData = null
-function dataDidLoad(places,centroidsFile){
+var totalIds = null
+var gids = null
+var finishedGids = null
+var finishedIdsFile = "finished_gids.json"
+
+function dataDidLoad(centroidsFile,finished){
+    console.log(finished)
     centroidsData = makeDictionary(centroidsFile)
-	placesData = getIdsFromDuration(places).sort()
-    var gids = getAllGid(centroidsFile)
-    console.log(gids)
-	mapboxgl.accessToken = 'pk.eyJ1IjoianozMDc3IiwiYSI6ImNqdHczOTkwbDBnOHM0Zm82cXo4anplbXYifQ.x1oWtwpzjoGcuqqh7ME79g';
+	//placesData = getIdsFromDuration(places).sort()
+    gids = getAllGid(centroidsFile)
+    totalIds = gids.length
+    // console.log(totalIds)
+	mapboxgl.accessToken = 'pk.eyJ1IjoiampqaWlhMTIzIiwiYSI6ImNpbDQ0Z2s1OTN1N3R1eWtzNTVrd29lMDIifQ.gSWjNbBSpIFzDXU2X5YCiQ';
 	//mapboxgl.accessToken ="pk.eyJ1IjoiampqaWlhMTIzIiwiYSI6ImNpbDQ0Z2s1OTN1N3R1eWtzNTVrd29lMDIifQ.gSWjNbBSpIFzDXU2X5YCiQ"
-		var currentId ="1400000US"+ placesData[geoidIndex]
+		var currentId =gids[geoidIndex]
 		//var currentId ="1400000US01003010500"
-	
 		var center = [centroidsData[currentId]["lng"],centroidsData[currentId]["lat"]]
-		
+     //   console.log(centroidsData["1400000US01003010500"])
+ //   console.log(center)
+    
    var map = new mapboxgl.Map({
         container: 'map',
-        //style:"mapbox://styles/jjjiia123/cjfo6vnob2pgp2rqux8au0p0o",
-		style: 'mapbox://styles/jz3077/cjtw39ocu1j2c1fqqfg44sm07',
+		style: 'mapbox://styles/jjjiia123/cjfo6vnob2pgp2rqux8au0p0o',
 		center:center,
         zoom: zoom,
         preserveDrawingBuffer: true    
     });
 
-
+   // var gidsList = finished.map(a => a.Gids);
+//console.log(gidsList)
+   finishedGids = finished.gids
+    
 	map.on("load",function(){
-		console.log(map.getStyle().layers)
+		
 		moveMap(map,center,currentId)
 	})
 }  
-
+var saveData = (function(data,fileName){
+ 
+    var a = document.createElement("a");
+    document.body.appendChild(a);
+    a.style = "display: none";
+    return function (data, fileName) {
+        var json = JSON.stringify(data),
+            blob = new Blob([json], {type: "octet/stream"}),
+            url = window.URL.createObjectURL(blob);
+        a.href = url;
+        a.download = fileName;
+        a.click();
+        window.URL.revokeObjectURL(url);
+    };
+}());
+ 
 function getAllGid(centroidsFile){
     var gids = []
+    //sort by area size
+    centroidsFile.sort( function(a, b) {
+      return (a.Gid - b.Gid);
+    });
+    //console.log(centroidsFile)
     for(var i in centroidsFile){
-        gids.push(centroidsFile[i].Gid)
+        if(centroidsFile[i].area>0){
+            gids.push(centroidsFile[i].Gid)
+        }else{
+            console.log("no area")
+        }
     }
     return gids
 }
@@ -85,7 +118,7 @@ function zoomToBounds(map,boundary,bearing){
      
 }
 function loadBoundaries(map,gid,bearing){
-	var file = d3.json("../geoProcessing/tract_geojsons/"+gid.replace("1400000US","")+".geojson")
+	var file = d3.json("../census/geoProcessing/tract_geojsons/"+gid.replace("1400000US","")+".geojson")
 	Promise.all([file])
 	.then(function(d){
 		var boundary = d[0].features[0].geometry
@@ -159,7 +192,9 @@ function getOrientation(map,center){
 }
 
 function moveMap(map,center,gid){
-	//
+    if(finishedGids.indexOf(gid)==-1){
+    	finishedGids.push(gid)
+        saveData({gids:finishedGids}, finishedIdsFile);
 		
 	 	var bearing = getOrientation(map,center)
 		//	loadBoundaries(map,gid)
@@ -168,18 +203,25 @@ function moveMap(map,center,gid){
 			loadBoundaries(map,gid,bearing)
 			  
                 map.once('moveend',function(){
-					
+					console.log(gid)
 				    var filter = ['!=', 'AFFGEOID',gid];
 					map.setFilter("tracts_highlight",filter)
 					
                     setTimeout(function(){
 						geoidIndex+=1
-						if(geoidIndex>placesData.length-1){
+						if(geoidIndex>totalIds-1){
 							return
 						}
                         makePrint(map,gid)		
                      }, 10000);
-                });            
+                });  
+    }else{
+        console.log("already downloaded")
+        geoidIndex+=1
+        var nextGid = gids[geoidIndex]
+        var nextCenter = centroidsData[nextGid]
+        moveMap(map,nextCenter,nextGid)
+    }
 }
 
 function makePrint(map, gid){
@@ -188,7 +230,7 @@ function makePrint(map, gid){
 	    canvas.toBlob(function(blob) {
 	               saveAs(blob, gid+".png");
 	           }, "image/png");
-			  var nextGid = "1400000US"+ placesData[geoidIndex]
+			  var nextGid = gids[geoidIndex]
 			  // var nextGid ="1400000US01003010500"
 			   
 			   var nextCenter = centroidsData[nextGid]
