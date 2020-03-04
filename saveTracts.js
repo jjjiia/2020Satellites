@@ -74,8 +74,9 @@ var saveData = (function(data,fileName){
 function getAllGid(centroidsFile){
     var gids = []
     //sort by area size
+    //1400000US06001400100
     centroidsFile.sort( function(a, b) {
-      return (a.Gid - b.Gid);
+      return (parseInt(a.Gid.split("US")) - parseInt(b.Gid.split("US")));
     });
     //console.log(centroidsFile)
     for(var i in centroidsFile){
@@ -213,7 +214,7 @@ function moveMap(map,center,gid){
 							return
 						}
                         makePrint(map,gid)		
-                     }, 10000);
+                     }, 50000);
                 });  
     }else{
         console.log("already downloaded")
